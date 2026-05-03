@@ -22,16 +22,15 @@ This project uses Node.js, TypeScript, the official MCP SDK, and `mysql2/promise
 
 ## Installation
 
-You can run the published package directly with `npx`:
+Run the server directly with `npx`:
 
 ```bash
 npx -y easy-mysql-mcp
 ```
 
-For local development:
+For local development after cloning the repository:
 
 ```bash
-git clone <your-repository-url>
 cd easy-mysql-mcp
 npm install
 npm run build
@@ -68,7 +67,7 @@ MYSQL_DATABASE=your_database
 
 ## Usage
 
-For published usage, configure your MCP client to launch the package through `npx`.
+Configure your MCP client to launch the package through `npx`.
 
 For local development, build the TypeScript source first:
 
@@ -108,26 +107,6 @@ Add the server to your `claude_desktop_config.json`:
 
 Restart Claude Desktop after updating the configuration.
 
-For local development, you can point Claude Desktop at your built file instead:
-
-```json
-{
-  "mcpServers": {
-    "easy-mysql-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/easy-mysql-mcp/build/index.js"],
-      "env": {
-        "MYSQL_HOST": "localhost",
-        "MYSQL_PORT": "3306",
-        "MYSQL_USER": "root",
-        "MYSQL_PASSWORD": "your_password",
-        "MYSQL_DATABASE": "your_database"
-      }
-    }
-  }
-}
-```
-
 ## Available Tools
 
 | Tool | Description |
@@ -162,40 +141,6 @@ To create a production build:
 
 ```bash
 npm run build
-```
-
-## Publishing to npm
-
-Before publishing, make sure the package name is available on npm:
-
-```bash
-npm view easy-mysql-mcp
-```
-
-If npm returns a `404`, the name is available.
-
-Log in to npm:
-
-```bash
-npm login
-```
-
-Check the package contents:
-
-```bash
-npm pack --dry-run
-```
-
-Publish the package:
-
-```bash
-npm publish
-```
-
-After publishing, users can run:
-
-```bash
-npx -y easy-mysql-mcp
 ```
 
 ## Project Structure
