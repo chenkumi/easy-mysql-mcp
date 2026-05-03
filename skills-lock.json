@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "tidbx-javascript-mysql2": {
+      "source": "pingcap/agent-rules",
+      "sourceType": "github",
+      "computedHash": "ecaab210f47361760a1e0f43d593b26f9e03ffc975da6c358fb32fd947ae0fa1"
+    }
+  }
+}
