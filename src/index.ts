@@ -8,7 +8,7 @@ import * as db from './db.js';
 // Initialize MCP Server/mcp
 const server = new McpServer({
   name: 'easy-mysql-mcp',
-  version: '1.0.1',
+  version: '1.0.3',
 });
 
 // --- Register Tools ---
