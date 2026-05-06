@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import './proxy.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import * as db from './db.js';
 
-// Initialize MCP Server
+
+// Initialize MCP Server/mcp
 const server = new McpServer({
   name: 'easy-mysql-mcp',
-  version: '1.0.0',
+  version: '1.0.1',
 });
 
 // --- Register Tools ---
@@ -157,9 +157,9 @@ server.registerTool(
     const user = await db.query('SELECT CURRENT_USER() as user');
     const grants = await db.query('SHOW GRANTS');
     return {
-      content: [{ 
-        type: 'text', 
-        text: JSON.stringify({ currentUser: user, grants }, null, 2) 
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ currentUser: user, grants }, null, 2)
       }],
     };
   }
