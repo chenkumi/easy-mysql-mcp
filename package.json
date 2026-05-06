@@ -1,6 +1,6 @@
 {
   "name": "easy-mysql-mcp",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "High performance MySQL MCP Server using mysql2",
   "main": "build/index.js",
   "type": "module",
