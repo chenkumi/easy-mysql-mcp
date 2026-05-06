@@ -85,8 +85,6 @@ The server communicates over stdio and is normally launched by an MCP client rat
 
 ## Claude Desktop Example
 
-Add the server to your `claude_desktop_config.json`:
-
 ```json
 {
   "mcpServers": {
@@ -96,9 +94,9 @@ Add the server to your `claude_desktop_config.json`:
       "env": {
         "MYSQL_HOST": "localhost",
         "MYSQL_PORT": "3306",
-        "MYSQL_USER": "root",
-        "MYSQL_PASSWORD": "your_password",
-        "MYSQL_DATABASE": "your_database"
+        "MYSQL_USER": "YOUR USERNAME",
+        "MYSQL_PASSWORD": "YOUR PASSWORD",
+        "MYSQL_DATABASE": "YOUR DB NAME"
       }
     }
   }
@@ -106,6 +104,44 @@ Add the server to your `claude_desktop_config.json`:
 ```
 
 Restart Claude Desktop after updating the configuration.
+
+## Codex config.toml Example
+
+```
+[mcp_servers.easy-mysql-mcp]
+args = ["-y", "easy-mysql-mcp"]
+command = "npx"
+enabled = true
+
+[mcp_servers.easy-mysql-mcp.env]
+MYSQL_HOST = "localhost"
+MYSQL_PORT = "3306"
+MYSQL_USER = "YOUR USERNAME"
+MYSQL_PASSWORD = "YOUR PASSWORD"
+MYSQL_DATABASE = "YOUR DB NAME"
+```
+
+## OpenCode opencode.jsonc Example
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "easy-mysql-mcp": {
+      "type": "local",
+      "command": ["npx", "-y", "easy-mysql-mcp"],
+      "enabled": true,
+      "environment": {
+        "MYSQL_HOST": "localhost",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "YOUR USERNAME",
+        "MYSQL_PASSWORD": "YOUR PASSWORD",
+        "MYSQL_DATABASE": "YOUR DB NAME",
+      },
+    },
+  },
+}
+```
 
 ## Available Tools
 
