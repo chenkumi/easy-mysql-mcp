@@ -4,11 +4,17 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import * as db from './db.js';
 
+const {
+  MYSQL_HOST,
+  MYSQL_PORT,
+  MYSQL_DATABASE,
+} = process.env;
 
 // Initialize MCP Server/mcp
 const server = new McpServer({
   name: 'easy-mysql-mcp',
   version: '1.0.3',
+  description: `MySQL Database: ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}`,
 });
 
 // --- Register Tools ---
