@@ -16,6 +16,11 @@ type ParsedSql = {
   tables: string[];
 };
 
+export type SqlAnalysis = {
+  statementType: string;
+  tableNames: string[];
+};
+
 export class SqlPolicyError extends Error {
   constructor(message: string) {
     super(message);
@@ -34,6 +39,15 @@ export function assertReadQueryAllowed(sql: string): void {
 
   assertNoUnsafeReadOptions(parsed.ast);
   assertTablePolicy(parsed.tables);
+}
+
+export function analyzeSql(sql: string): SqlAnalysis {
+  const parsed = parseSingleStatement(sql);
+
+  return {
+    statementType: parsed.type,
+    tableNames: parsed.tables,
+  };
 }
 
 export function assertExplainQueryAllowed(sql: string): void {

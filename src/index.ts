@@ -2,9 +2,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { isReadOnlyMode } from './config.js';
+import { isPolicyHookEnabled, isReadOnlyMode } from './config.js';
 import * as db from './db.js';
 import { cleanupOldLogs } from './logs.js';
+import { cancelApproval, listPendingApprovals, runApprovedCommand } from './approvalStore.js';
 import {
   describeIndex,
   describeTable,
@@ -105,6 +106,54 @@ if (!isReadOnlyMode()) {
 
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+}
+
+if (isPolicyHookEnabled()) {
+  server.registerTool(
+    'mysql_run_approved_command',
+    {
+      description: 'Run a pending command after the host has obtained user approval.',
+      inputSchema: z.object({
+        approvalId: z.string().min(1).describe('The approval id returned by an approval_required response.'),
+      }),
+    },
+    async ({ approvalId }) => {
+      const result = await runApprovedCommand(approvalId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    'mysql_list_pending_approvals',
+    {
+      description: 'List pending commands waiting for approval.',
+      inputSchema: z.object({}),
+    },
+    async () => {
+      const result = listPendingApprovals();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    'mysql_cancel_approval',
+    {
+      description: 'Cancel a pending approval request.',
+      inputSchema: z.object({
+        approvalId: z.string().min(1).describe('The approval id to cancel.'),
+      }),
+    },
+    async ({ approvalId }) => {
+      const result = cancelApproval(approvalId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ cancelled: true, approval: result }, null, 2) }],
       };
     }
   );

@@ -13,7 +13,6 @@ This project uses Node.js, TypeScript, the official MCP SDK, and `mysql2/promise
 - Schema discovery tools for tables, views, indexes, and triggers
 - Query plan inspection with `EXPLAIN`
 - Current user and privilege inspection
-- stdout protection to prevent non-MCP logs from polluting the stdio protocol
 
 ## Requirements
 
@@ -60,6 +59,8 @@ Configure the server with environment variables. You can provide them through yo
 | `MYSQL_MCP_ALLOW_TABLES` | No | - | Comma-separated table allowlist, such as `users,orders` |
 | `MYSQL_MCP_DENY_TABLES` | No | - | Comma-separated table denylist, such as `payments,secrets` |
 | `MYSQL_BATCH_MAX_SIZE` | No | `100` | Maximum number of parameter sets per internal batch for `mysql_batch_execute` |
+| `MYSQL_POLICY_HOOK` | No | - | HTTP POST URL for external accept/reject/approval policy decisions |
+| `MYSQL_APPROVAL_TTL_SECONDS` | No | `300` | Number of seconds a pending approval remains valid |
 
 Example `.env`:
 
@@ -165,6 +166,9 @@ MYSQL_DATABASE = "YOUR DB NAME"
 | `describe_index` | Show indexes for a table |
 | `list_triggers` | List triggers in the current database |
 | `get_current_privileges` | Show the current MySQL user and grants |
+| `mysql_run_approved_command` | Run a pending command after approval, only registered when `MYSQL_POLICY_HOOK` is set |
+| `mysql_list_pending_approvals` | List pending approval requests, only registered when `MYSQL_POLICY_HOOK` is set |
+| `mysql_cancel_approval` | Cancel a pending approval request, only registered when `MYSQL_POLICY_HOOK` is set |
 
 When `MYSQL_READ_ONLY=true` or `MYSQL_MCP_MODE=readonly`, the `mysql_execute`, `mysql_batch_execute`, and `mysql_import_csv` tools are not registered.
 
@@ -244,12 +248,83 @@ The server applies a lightweight SQL policy before executing user-provided SQL:
 
 Table policy matching is best-effort and based on SQL parsing. You can use either `table` or `database.table` entries. MySQL grants remain the final security boundary.
 
+### Policy Order
+
+Policy checks run in this order:
+
+1. Built-in SQL safety checks run first, such as single-statement enforcement and allowed statement types for each tool.
+2. `MYSQL_MCP_DENY_TABLES` is checked next. If a detected table matches the denylist, the command is rejected immediately.
+3. `MYSQL_MCP_ALLOW_TABLES` is checked after the denylist. If an allowlist is configured, every detected table must be included in it.
+4. `MYSQL_POLICY_HOOK` runs only after the built-in SQL policy and table allow/deny policy pass.
+
+If both `MYSQL_MCP_ALLOW_TABLES` and `MYSQL_MCP_DENY_TABLES` are configured, the denylist takes precedence. For example:
+
+```env
+MYSQL_MCP_ALLOW_TABLES=users,orders,payments
+MYSQL_MCP_DENY_TABLES=payments
+```
+
+In this configuration, `users` and `orders` are allowed, `payments` is rejected, and all other tables are rejected because they are not in the allowlist.
+
+`MYSQL_POLICY_HOOK` cannot override built-in rejections. It can only decide what happens after a command has already passed local policy: `accept`, `reject`, or `approval_required`.
+
+## Policy Hook and Approvals
+
+When `MYSQL_POLICY_HOOK` is configured, the server posts each tool action to the hook after built-in policy checks pass and before the command runs.
+
+Example hook request:
+
+```json
+{
+  "functionName": "mysql_execute",
+  "sql": "UPDATE users SET email = ? WHERE id = ?",
+  "statementType": "update",
+  "tableNames": ["users"],
+  "paramsPreview": ["new@example.com", 123],
+  "metadata": {
+    "database": "app_db",
+    "mode": "readwrite",
+    "timestamp": "2026-05-20T12:00:00.000Z"
+  }
+}
+```
+
+The hook must return one of:
+
+```json
+{ "status": "accept" }
+```
+
+```json
+{ "status": "reject", "message": "Writes are blocked outside maintenance windows." }
+```
+
+```json
+{
+  "status": "approval_required",
+  "message": "User approval is required before updating users."
+}
+```
+
+For `approval_required`, the server does not execute the command. It stores the original pending command in memory and returns an `approval_required` response with a server-generated `approvalId`. The hook does not provide the approval id. After the MCP host obtains user approval, it can call:
+
+```json
+{
+  "approvalId": "apv_..."
+}
+```
+
+with `mysql_run_approved_command`. Pending approvals are one-time use and expire after `MYSQL_APPROVAL_TTL_SECONDS`. `mysql_list_pending_approvals` and `mysql_cancel_approval` are also available while `MYSQL_POLICY_HOOK` is set.
+
+This is an approval-friendly protocol. The server cannot verify that a human approved the action; the MCP host or external platform is responsible for presenting the approval request to a user.
+
 ## Security Notes
 
 - Use a dedicated MySQL user with the minimum permissions your assistant needs.
 - Prefer read-only database credentials if you only need inspection and reporting.
 - Use `MYSQL_READ_ONLY=true` or `MYSQL_MCP_MODE=readonly` to hide write execution from MCP clients.
 - Use `MYSQL_MCP_ALLOW_TABLES` and `MYSQL_MCP_DENY_TABLES` as MCP-level guardrails, not as a replacement for MySQL grants.
+- Use `MYSQL_POLICY_HOOK` when you need an external policy or approval workflow.
 - Be careful with `mysql_execute`, because it can modify data.
 - Be careful with `mysql_import_csv`, because it can insert many rows.
 - Batch execution and CSV import logs include parameter values and per-row results. Treat files under `logs/` as sensitive.
@@ -300,10 +375,12 @@ src/
   db.ts       MySQL pool and query helpers
   index.ts    MCP server and tool registration
   logs.ts     Batch execution log helpers
+  policyHook.ts External policy hook client and approval response helpers
   sqlPolicy.ts SQL parsing and policy enforcement
   toolHandlers.ts Shared tool handler implementations
+  approvalStore.ts In-memory pending approval store
 ```
 
 ## License
 
-ISC
+MIT. See [LICENSE.md](LICENSE.md).

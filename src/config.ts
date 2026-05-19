@@ -1,6 +1,7 @@
 export type McpMode = 'readonly' | 'readwrite';
 
 const DEFAULT_BATCH_MAX_SIZE = 100;
+const DEFAULT_APPROVAL_TTL_SECONDS = 300;
 
 function parseBoolean(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true';
@@ -43,8 +44,14 @@ export const config = {
   allowTables: parseList(process.env.MYSQL_MCP_ALLOW_TABLES),
   denyTables: parseList(process.env.MYSQL_MCP_DENY_TABLES),
   batchMaxSize: parsePositiveInt(process.env.MYSQL_BATCH_MAX_SIZE, DEFAULT_BATCH_MAX_SIZE),
+  policyHookUrl: process.env.MYSQL_POLICY_HOOK?.trim() || undefined,
+  approvalTtlSeconds: parsePositiveInt(process.env.MYSQL_APPROVAL_TTL_SECONDS, DEFAULT_APPROVAL_TTL_SECONDS),
 };
 
 export function isReadOnlyMode(): boolean {
   return config.mode === 'readonly';
+}
+
+export function isPolicyHookEnabled(): boolean {
+  return Boolean(config.policyHookUrl);
 }
