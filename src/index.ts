@@ -2,7 +2,23 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { isReadOnlyMode } from './config.js';
 import * as db from './db.js';
+import { cleanupOldLogs } from './logs.js';
+import {
+  describeIndex,
+  describeTable,
+  explainQuery,
+  getCurrentPrivileges,
+  listTables,
+  listTriggers,
+  listViews,
+  mysqlBatchExecute,
+  mysqlExecute,
+  mysqlExportCsv,
+  mysqlImportCsv,
+  mysqlQuery,
+} from './toolHandlers.js';
 
 const {
   MYSQL_HOST,
@@ -19,6 +35,8 @@ const server = new McpServer({
 
 // --- Register Tools ---
 
+const transactionModeSchema = z.enum(['all', 'batch', 'each', 'none', 'everyone']);
+
 server.registerTool(
   'mysql_query',
   {
@@ -28,24 +46,82 @@ server.registerTool(
     }),
   },
   async ({ sql }) => {
-    const results = await db.query(sql);
+    const results = await mysqlQuery(sql);
     return {
       content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
     };
   }
 );
 
+if (!isReadOnlyMode()) {
+  server.registerTool(
+    'mysql_execute',
+    {
+      description: 'Execute a data modification SQL statement (e.g., INSERT, UPDATE, DELETE).',
+      inputSchema: z.object({
+        sql: z.string().describe('The SQL statement to execute.'),
+        params: z.array(z.any()).optional().describe('Optional parameters for the statement.'),
+      }),
+    },
+    async ({ sql, params }) => {
+      const result = await mysqlExecute(sql, params);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    'mysql_batch_execute',
+    {
+      description: 'Execute one data modification SQL statement repeatedly with multiple parameter sets.',
+      inputSchema: z.object({
+        sql: z.string().describe('The parameterized SQL statement to execute for each params entry.'),
+        paramsList: z.array(z.array(z.any())).min(1).describe('A list of parameter arrays. Each item is executed with the same SQL statement.'),
+        transaction: transactionModeSchema.optional().default('all').describe('Transaction scope: all, batch, each, or none. "everyone" is accepted as an alias for each.'),
+      }),
+    },
+    async ({ sql, paramsList, transaction }) => {
+      const result = await mysqlBatchExecute(sql, paramsList, normalizeTransactionMode(transaction));
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    'mysql_import_csv',
+    {
+      description: 'Import a UTF-8 CSV file into a table using the header row as column names.',
+      inputSchema: z.object({
+        tableName: z.string().min(1).describe('The target table name.'),
+        filePath: z.string().min(1).describe('Path to a UTF-8 CSV file. The first row must contain column names.'),
+        transaction: transactionModeSchema.optional().default('all').describe('Transaction scope: all, batch, each, or none. "everyone" is accepted as an alias for each.'),
+      }),
+    },
+    async ({ tableName, filePath, transaction }) => {
+      const result = await mysqlImportCsv(tableName, filePath, normalizeTransactionMode(transaction));
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+}
+
 server.registerTool(
-  'mysql_execute',
+  'mysql_export_csv',
   {
-    description: 'Execute a data modification SQL statement (e.g., INSERT, UPDATE, DELETE).',
+    description: 'Export all rows from a table to a UTF-8 CSV file.',
     inputSchema: z.object({
-      sql: z.string().describe('The SQL statement to execute.'),
-      params: z.array(z.any()).optional().describe('Optional parameters for the statement.'),
+      tableName: z.string().min(1).describe('The source table name.'),
+      filePath: z.string().min(1).describe('Path where the UTF-8 CSV file should be written.'),
     }),
   },
-  async ({ sql, params }) => {
-    const result = await db.execute(sql, params);
+  async ({ tableName, filePath }) => {
+    const result = await mysqlExportCsv(tableName, filePath);
+
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
@@ -61,7 +137,7 @@ server.registerTool(
     }),
   },
   async ({ sql }) => {
-    const results = await db.query(`EXPLAIN ${sql}`);
+    const results = await explainQuery(sql);
     return {
       content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
     };
@@ -75,13 +151,9 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const results = await db.query(`
-      SELECT TABLE_NAME, TABLE_ROWS, TABLE_COMMENT 
-      FROM information_schema.TABLES 
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
-    `);
+    const filteredResults = await listTables();
     return {
-      content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(filteredResults, null, 2) }],
     };
   }
 );
@@ -93,13 +165,9 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const results = await db.query(`
-      SELECT TABLE_NAME, VIEW_DEFINITION 
-      FROM information_schema.VIEWS 
-      WHERE TABLE_SCHEMA = DATABASE()
-    `);
+    const filteredResults = await listViews();
     return {
-      content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(filteredResults, null, 2) }],
     };
   }
 );
@@ -113,10 +181,7 @@ server.registerTool(
     }),
   },
   async ({ tables }) => {
-    const results: Record<string, any> = {};
-    for (const table of tables) {
-      results[table] = await db.query(`DESCRIBE ${table}`);
-    }
+    const results = await describeTable(tables);
     return {
       content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
     };
@@ -132,7 +197,7 @@ server.registerTool(
     }),
   },
   async ({ table }) => {
-    const results = await db.query(`SHOW INDEX FROM ${table}`);
+    const results = await describeIndex(table);
     return {
       content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
     };
@@ -146,9 +211,9 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const results = await db.query('SHOW TRIGGERS');
+    const filteredResults = await listTriggers();
     return {
-      content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(filteredResults, null, 2) }],
     };
   }
 );
@@ -160,12 +225,11 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const user = await db.query('SELECT CURRENT_USER() as user');
-    const grants = await db.query('SHOW GRANTS');
+    const result = await getCurrentPrivileges();
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({ currentUser: user, grants }, null, 2)
+        text: JSON.stringify(result, null, 2)
       }],
     };
   }
@@ -173,6 +237,7 @@ server.registerTool(
 
 // Start server
 async function main() {
+  await cleanupOldLogs();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('MySQL MCP Server running on stdio');
@@ -182,3 +247,7 @@ main().catch((error) => {
   console.error('Fatal error in main():', error);
   process.exit(1);
 });
+
+function normalizeTransactionMode(transaction: z.infer<typeof transactionModeSchema>): db.BatchTransactionMode {
+  return transaction === 'everyone' ? 'each' : transaction;
+}

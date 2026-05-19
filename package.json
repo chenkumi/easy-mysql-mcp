@@ -27,13 +27,15 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
     "start": "node build/index.js",
     "dev": "tsc --watch",
     "prepack": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "mysql2": "^3.22.2",
+    "mysql2": "^3.22.3",
+    "node-sql-parser": "^5.4.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -1,0 +1,50 @@
+export type McpMode = 'readonly' | 'readwrite';
+
+const DEFAULT_BATCH_MAX_SIZE = 100;
+
+function parseBoolean(value: string | undefined): boolean {
+  return value?.toLowerCase() === 'true';
+}
+
+function parsePositiveInt(value: string | undefined, defaultValue: number): number {
+  const parsed = value ? Number.parseInt(value, 10) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
+function parseList(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => normalizeTableName(item));
+}
+
+export function normalizeTableName(table: string): string {
+  return table.replace(/`/g, '').toLowerCase();
+}
+
+function resolveMode(): McpMode {
+  const explicitMode = process.env.MYSQL_MCP_MODE?.toLowerCase();
+  const readOnly = parseBoolean(process.env.MYSQL_READ_ONLY);
+
+  if (readOnly || explicitMode === 'readonly' || explicitMode === 'read-only') {
+    return 'readonly';
+  }
+
+  return 'readwrite';
+}
+
+export const config = {
+  mode: resolveMode(),
+  allowTables: parseList(process.env.MYSQL_MCP_ALLOW_TABLES),
+  denyTables: parseList(process.env.MYSQL_MCP_DENY_TABLES),
+  batchMaxSize: parsePositiveInt(process.env.MYSQL_BATCH_MAX_SIZE, DEFAULT_BATCH_MAX_SIZE),
+};
+
+export function isReadOnlyMode(): boolean {
+  return config.mode === 'readonly';
+}
