@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { isPolicyHookEnabled, isReadOnlyMode } from './config.js';
+import { isAdvancedMode, isPolicyHookEnabled, isReadOnlyMode } from './config.js';
 import * as db from './db.js';
 import { cleanupOldLogs } from './logs.js';
 import { cancelApproval, listPendingApprovals, runApprovedCommand } from './approvalStore.js';
@@ -18,6 +18,7 @@ import {
   mysqlExecute,
   mysqlExportCsv,
   mysqlImportCsv,
+  mysqlSchemaExecute,
   mysqlQuery,
 } from './toolHandlers.js';
 
@@ -103,6 +104,25 @@ if (!isReadOnlyMode()) {
     },
     async ({ tableName, filePath, transaction }) => {
       const result = await mysqlImportCsv(tableName, filePath, transaction);
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+}
+
+if (isAdvancedMode()) {
+  server.registerTool(
+    'mysql_schema_execute',
+    {
+      description: 'Execute an advanced schema modification SQL statement, such as CREATE TABLE, ALTER TABLE, DROP VIEW, CREATE TRIGGER, or CREATE INDEX.',
+      inputSchema: z.object({
+        sql: z.string().describe('The single schema modification SQL statement to execute.'),
+      }),
+    },
+    async ({ sql }) => {
+      const result = await mysqlSchemaExecute(sql);
 
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],

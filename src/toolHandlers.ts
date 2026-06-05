@@ -8,6 +8,7 @@ import {
   assertExecuteAllowed,
   assertExplainQueryAllowed,
   assertReadQueryAllowed,
+  assertSchemaExecuteAllowed,
   assertTablesAllowed,
   isTableAllowed,
 } from './sqlPolicy.js';
@@ -36,6 +37,19 @@ export async function mysqlExecute(sql: string, params?: any[]): Promise<unknown
     paramsPreview: params ?? null,
     summary: { sql, paramsPreview: params ?? null },
   }, () => db.execute(sql, params));
+}
+
+export async function mysqlSchemaExecute(sql: string): Promise<unknown> {
+  assertSchemaExecuteAllowed(sql);
+  const analysis = analyzeSql(sql);
+
+  return runWithPolicy({
+    functionName: 'mysql_schema_execute',
+    sql,
+    statementType: analysis.statementType,
+    tableNames: analysis.tableNames,
+    summary: { sql },
+  }, () => db.query(sql));
 }
 
 export async function mysqlBatchExecute(

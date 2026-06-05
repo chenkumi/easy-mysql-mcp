@@ -4,6 +4,7 @@ import { createPendingApproval } from './approvalStore.js';
 export type ToolFunctionName =
   | 'mysql_query'
   | 'mysql_execute'
+  | 'mysql_schema_execute'
   | 'mysql_batch_execute'
   | 'mysql_import_csv'
   | 'mysql_export_csv'

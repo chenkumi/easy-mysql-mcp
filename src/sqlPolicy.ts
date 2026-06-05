@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import type { AST, TableColumnAst } from 'node-sql-parser';
-import { config, isReadOnlyMode, normalizeTableName } from './config.js';
+import { config, isAdvancedMode, isReadOnlyMode, normalizeTableName } from './config.js';
 
 const require = createRequire(import.meta.url);
 const { Parser } = require('node-sql-parser/build/mysql.js') as typeof import('node-sql-parser/build/mysql.js');
@@ -9,6 +9,9 @@ const parser = new Parser();
 const parserOptions = { database: 'MySQL' };
 const readQueryTypes = new Set(['select', 'show', 'desc', 'describe', 'explain']);
 const executeTypes = new Set(['insert', 'update', 'delete', 'replace']);
+const schemaExecuteTypes = new Set(['create', 'alter', 'drop', 'rename']);
+const createSchemaKeywords = new Set(['table', 'view', 'trigger', 'index']);
+const dropSchemaKeywords = new Set(['table', 'view', 'trigger', 'index']);
 
 type ParsedSql = {
   ast: AST | AST[] | any;
@@ -74,6 +77,24 @@ export function assertExecuteAllowed(sql: string): void {
     );
   }
 
+  assertTablePolicy(parsed.tables);
+}
+
+export function assertSchemaExecuteAllowed(sql: string): void {
+  if (!isAdvancedMode()) {
+    throw new SqlPolicyError('SQL rejected: schema execution requires MYSQL_MCP_MODE=advanced.');
+  }
+
+  const parsed = parseSingleStatement(sql);
+
+  if (!schemaExecuteTypes.has(parsed.type)) {
+    throw new SqlPolicyError(
+      `SQL rejected: mysql_schema_execute only allows CREATE, ALTER, DROP, and RENAME statements. Received ${parsed.type.toUpperCase()}.`,
+    );
+  }
+
+  assertSchemaAstAllowed(parsed.ast);
+  assertNoUnsafeReadOptions(parsed.ast);
   assertTablePolicy(parsed.tables);
 }
 
@@ -154,6 +175,47 @@ function assertNoUnsafeReadOptions(ast: any): void {
 
   if (ast?.type === 'explain') {
     assertNoUnsafeReadOptions(ast.expr);
+  }
+
+  if (ast?.type === 'create' && ast.keyword === 'view') {
+    assertNoUnsafeReadOptions(ast.select);
+  }
+}
+
+function assertSchemaAstAllowed(ast: any): void {
+  switch (ast?.type) {
+    case 'create': {
+      const keyword = normalizeKeyword(ast.keyword);
+
+      if (!createSchemaKeywords.has(keyword)) {
+        throw new SqlPolicyError(`SQL rejected: mysql_schema_execute does not allow CREATE ${keyword.toUpperCase()}.`);
+      }
+
+      if (keyword === 'table' && ast.query_expr) {
+        throw new SqlPolicyError('SQL rejected: CREATE TABLE ... AS SELECT is not allowed by mysql_schema_execute.');
+      }
+
+      return;
+    }
+    case 'alter':
+      if (!ast.table) {
+        throw new SqlPolicyError('SQL rejected: mysql_schema_execute only allows ALTER TABLE statements.');
+      }
+
+      return;
+    case 'drop': {
+      const keyword = normalizeKeyword(ast.keyword);
+
+      if (!dropSchemaKeywords.has(keyword)) {
+        throw new SqlPolicyError(`SQL rejected: mysql_schema_execute does not allow DROP ${keyword.toUpperCase()}.`);
+      }
+
+      return;
+    }
+    case 'rename':
+      return;
+    default:
+      throw new SqlPolicyError(`SQL rejected: mysql_schema_execute does not allow ${String(ast?.type ?? 'unknown').toUpperCase()} statements.`);
   }
 }
 
@@ -241,6 +303,12 @@ function collectTablesFromAst(ast: any): string[] {
   }
 
   switch (ast.type) {
+    case 'create':
+      return collectCreateTablesFromAst(ast);
+    case 'drop':
+      return collectDropTablesFromAst(ast);
+    case 'rename':
+      return collectRenameTablesFromAst(ast);
     case 'desc':
     case 'describe':
       return typeof ast.table === 'string' ? [ast.table] : [];
@@ -249,4 +317,61 @@ function collectTablesFromAst(ast: any): string[] {
     default:
       return [];
   }
+}
+
+function collectCreateTablesFromAst(ast: any): string[] {
+  const tables = [
+    ...collectTableLikeNames(ast.table),
+    ...collectTableLikeNames(ast.view),
+    ...collectTableLikeNames(ast.trigger),
+    ...collectTableLikeNames(ast.like?.table),
+  ];
+
+  if (ast.keyword === 'view') {
+    tables.push(...collectTablesFromAst(ast.select));
+  }
+
+  return tables;
+}
+
+function collectDropTablesFromAst(ast: any): string[] {
+  if (ast.keyword === 'index') {
+    return collectTableLikeNames(ast.table);
+  }
+
+  return collectTableLikeNames(ast.name);
+}
+
+function collectRenameTablesFromAst(ast: any): string[] {
+  return collectTableLikeNames(ast.table);
+}
+
+function collectTableLikeNames(value: any): string[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectTableLikeNames(item));
+  }
+
+  if (typeof value === 'string') {
+    return [value];
+  }
+
+  if (typeof value === 'object') {
+    const objectName = value.table ?? value.view ?? value.trigger;
+
+    if (typeof objectName === 'string') {
+      return value.db || value.schema
+        ? [`${value.db ?? value.schema}.${objectName}`]
+        : [objectName];
+    }
+  }
+
+  return [];
+}
+
+function normalizeKeyword(keyword: unknown): string {
+  return typeof keyword === 'string' ? keyword.toLowerCase() : 'unknown';
 }

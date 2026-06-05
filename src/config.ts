@@ -1,4 +1,4 @@
-export type McpMode = 'readonly' | 'readwrite';
+export type McpMode = 'readonly' | 'readwrite' | 'advanced';
 
 const DEFAULT_BATCH_MAX_SIZE = 100;
 const DEFAULT_APPROVAL_TTL_SECONDS = 300;
@@ -37,6 +37,10 @@ function resolveMode(): McpMode {
     return 'readonly';
   }
 
+  if (explicitMode === 'advanced') {
+    return 'advanced';
+  }
+
   return 'readwrite';
 }
 
@@ -52,6 +56,10 @@ export const config = {
 
 export function isReadOnlyMode(): boolean {
   return config.mode === 'readonly';
+}
+
+export function isAdvancedMode(): boolean {
+  return config.mode === 'advanced';
 }
 
 export function isPolicyHookEnabled(): boolean {

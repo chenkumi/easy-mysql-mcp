@@ -55,7 +55,7 @@ Configure the server with environment variables. You can provide them through yo
 | `MYSQL_ENABLE_KEEP_ALIVE` | No | `true` | Whether TCP keep-alive is enabled |
 | `MYSQL_KEEP_ALIVE_INITIAL_DELAY` | No | `0` | Initial TCP keep-alive delay in milliseconds |
 | `MYSQL_READ_ONLY` | No | `false` | When `true`, enables read-only mode and does not register `mysql_execute` |
-| `MYSQL_MCP_MODE` | No | `readwrite` | MCP policy mode. Use `readonly` to disable write execution |
+| `MYSQL_MCP_MODE` | No | `readwrite` | MCP policy mode. Use `readonly` to disable write execution or `advanced` to enable schema modification tools |
 | `MYSQL_MCP_ALLOW_TABLES` | No | - | Comma-separated table allowlist, such as `users,orders` |
 | `MYSQL_MCP_DENY_TABLES` | No | - | Comma-separated table denylist, such as `payments,secrets` |
 | `MYSQL_BATCH_MAX_SIZE` | No | `100` | Maximum number of parameter sets per internal batch for `mysql_batch_execute` |
@@ -157,6 +157,7 @@ MYSQL_DATABASE = "YOUR DB NAME"
 | --- | --- |
 | `mysql_query` | Execute a SQL query intended for data retrieval, such as `SELECT` |
 | `mysql_execute` | Execute a data modification statement, such as `INSERT`, `UPDATE`, or `DELETE` |
+| `mysql_schema_execute` | Execute schema modification statements in advanced mode, such as `CREATE TABLE`, `ALTER TABLE`, `CREATE VIEW`, `CREATE TRIGGER`, and `CREATE INDEX` |
 | `mysql_batch_execute` | Execute one data modification statement repeatedly with multiple parameter sets |
 | `mysql_import_csv` | Import a UTF-8 CSV file into a table using the header row as column names |
 | `mysql_export_csv` | Export all rows from a table to a UTF-8 CSV file |
@@ -172,6 +173,8 @@ MYSQL_DATABASE = "YOUR DB NAME"
 | `mysql_cancel_approval` | Cancel a pending approval request, only registered when `MYSQL_POLICY_HOOK` is set |
 
 When `MYSQL_READ_ONLY=true` or `MYSQL_MCP_MODE=readonly`, the `mysql_execute`, `mysql_batch_execute`, and `mysql_import_csv` tools are not registered.
+
+When `MYSQL_MCP_MODE=advanced`, `mysql_schema_execute` is registered. Existing write tools remain available because advanced mode includes read/write behavior.
 
 ### Batch Execute
 
@@ -237,10 +240,12 @@ The server applies a lightweight SQL policy before executing user-provided SQL:
 - `mysql_query` allows only single-statement `SELECT`, `SHOW`, `DESCRIBE`, and `EXPLAIN` queries.
 - `explain_query` accepts only a single `SELECT` statement and runs `EXPLAIN` for it.
 - `mysql_execute` allows only single-statement `INSERT`, `UPDATE`, `DELETE`, and `REPLACE` statements when write mode is enabled.
+- `mysql_schema_execute` is only registered when `MYSQL_MCP_MODE=advanced`, and allows single-statement schema changes for tables, views, triggers, and indexes.
 - `mysql_batch_execute` uses the same SQL policy as `mysql_execute` and applies the statement repeatedly with parameter arrays.
 - `mysql_import_csv` uses table policy and the same batch execution path as `mysql_batch_execute`.
 - `mysql_export_csv` uses table policy before exporting table data.
 - Multi-statement SQL is rejected.
+- `CREATE TABLE ... AS SELECT` is rejected because it copies data while creating a table.
 - `SELECT ... INTO` and locking reads are rejected for read-query tools.
 - `MYSQL_MCP_DENY_TABLES` rejects matching tables before `MYSQL_MCP_ALLOW_TABLES` is evaluated.
 - If `MYSQL_MCP_ALLOW_TABLES` is set, every detected table must be included in the allowlist.
@@ -266,6 +271,23 @@ MYSQL_MCP_DENY_TABLES=payments
 In this configuration, `users` and `orders` are allowed, `payments` is rejected, and all other tables are rejected because they are not in the allowlist.
 
 `MYSQL_POLICY_HOOK` cannot override built-in rejections. It can only decide what happens after a command has already passed local policy: `accept`, `reject`, or `approval_required`.
+
+### Advanced Schema Mode
+
+Set `MYSQL_MCP_MODE=advanced` to enable `mysql_schema_execute` for schema changes. This is an explicit opt-in mode for database structure operations.
+
+Allowed schema statements:
+
+| Object | Statements |
+| --- | --- |
+| Tables | `CREATE TABLE`, `ALTER TABLE`, `DROP TABLE`, `RENAME TABLE` |
+| Views | `CREATE VIEW`, `CREATE OR REPLACE VIEW`, `DROP VIEW` |
+| Triggers | `CREATE TRIGGER`, `DROP TRIGGER` |
+| Indexes | `CREATE INDEX`, `DROP INDEX`, plus index changes through `ALTER TABLE` |
+
+The same table allow/deny policy applies to detected schema objects and referenced tables. `MYSQL_MCP_DENY_TABLES` still takes precedence over `MYSQL_MCP_ALLOW_TABLES`.
+
+Advanced mode still rejects multi-statement SQL, unsupported DDL object types, and `CREATE TABLE ... AS SELECT`.
 
 ## Policy Hook and Approvals
 
@@ -322,9 +344,11 @@ This is an approval-friendly protocol. The server cannot verify that a human app
 - Use a dedicated MySQL user with the minimum permissions your assistant needs.
 - Prefer read-only database credentials if you only need inspection and reporting.
 - Use `MYSQL_READ_ONLY=true` or `MYSQL_MCP_MODE=readonly` to hide write execution from MCP clients.
+- Use `MYSQL_MCP_MODE=advanced` only when the assistant should be able to modify schema objects such as tables, views, triggers, and indexes.
 - Use `MYSQL_MCP_ALLOW_TABLES` and `MYSQL_MCP_DENY_TABLES` as MCP-level guardrails, not as a replacement for MySQL grants.
 - Use `MYSQL_POLICY_HOOK` when you need an external policy or approval workflow.
 - Be careful with `mysql_execute`, because it can modify data.
+- Be careful with `mysql_schema_execute`, because it can create, alter, or drop database structure.
 - Be careful with `mysql_import_csv`, because it can insert many rows.
 - Batch execution and CSV import logs include parameter values and per-row results. Treat files under `MYSQL_LOG_PATH` as sensitive.
 - CSV export writes table data to the local filesystem. Treat exported files as sensitive.
