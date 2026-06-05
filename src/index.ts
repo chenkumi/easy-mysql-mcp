@@ -31,7 +31,7 @@ const {
 // Initialize MCP Server/mcp
 const server = new McpServer({
   name: 'easy-mysql-mcp',
-  version: '1.1.1',
+  version: '1.1.2',
   description: `MySQL Database: ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}`,
 });
 
