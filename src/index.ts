@@ -30,13 +30,13 @@ const {
 // Initialize MCP Server/mcp
 const server = new McpServer({
   name: 'easy-mysql-mcp',
-  version: '1.0.3',
+  version: '1.1.0',
   description: `MySQL Database: ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}`,
 });
 
 // --- Register Tools ---
 
-const transactionModeSchema = z.enum(['all', 'batch', 'each', 'none', 'everyone']);
+const transactionModeSchema = z.enum(['all', 'batch', 'each', 'none']);
 
 server.registerTool(
   'mysql_query',
@@ -79,11 +79,11 @@ if (!isReadOnlyMode()) {
       inputSchema: z.object({
         sql: z.string().describe('The parameterized SQL statement to execute for each params entry.'),
         paramsList: z.array(z.array(z.any())).min(1).describe('A list of parameter arrays. Each item is executed with the same SQL statement.'),
-        transaction: transactionModeSchema.optional().default('all').describe('Transaction scope: all, batch, each, or none. "everyone" is accepted as an alias for each.'),
+        transaction: transactionModeSchema.optional().default('all').describe('Transaction scope: all, batch, each, or none.'),
       }),
     },
     async ({ sql, paramsList, transaction }) => {
-      const result = await mysqlBatchExecute(sql, paramsList, normalizeTransactionMode(transaction));
+      const result = await mysqlBatchExecute(sql, paramsList, transaction);
 
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -98,11 +98,11 @@ if (!isReadOnlyMode()) {
       inputSchema: z.object({
         tableName: z.string().min(1).describe('The target table name.'),
         filePath: z.string().min(1).describe('Path to a UTF-8 CSV file. The first row must contain column names.'),
-        transaction: transactionModeSchema.optional().default('all').describe('Transaction scope: all, batch, each, or none. "everyone" is accepted as an alias for each.'),
+        transaction: transactionModeSchema.optional().default('all').describe('Transaction scope: all, batch, each, or none.'),
       }),
     },
     async ({ tableName, filePath, transaction }) => {
-      const result = await mysqlImportCsv(tableName, filePath, normalizeTransactionMode(transaction));
+      const result = await mysqlImportCsv(tableName, filePath, transaction);
 
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -296,7 +296,3 @@ main().catch((error) => {
   console.error('Fatal error in main():', error);
   process.exit(1);
 });
-
-function normalizeTransactionMode(transaction: z.infer<typeof transactionModeSchema>): db.BatchTransactionMode {
-  return transaction === 'everyone' ? 'each' : transaction;
-}

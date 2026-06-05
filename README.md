@@ -59,6 +59,7 @@ Configure the server with environment variables. You can provide them through yo
 | `MYSQL_MCP_ALLOW_TABLES` | No | - | Comma-separated table allowlist, such as `users,orders` |
 | `MYSQL_MCP_DENY_TABLES` | No | - | Comma-separated table denylist, such as `payments,secrets` |
 | `MYSQL_BATCH_MAX_SIZE` | No | `100` | Maximum number of parameter sets per internal batch for `mysql_batch_execute` |
+| `MYSQL_LOG_PATH` | No | `logs` | Directory used for batch execution and CSV import log files |
 | `MYSQL_POLICY_HOOK` | No | - | HTTP POST URL for external accept/reject/approval policy decisions |
 | `MYSQL_APPROVAL_TTL_SECONDS` | No | `300` | Number of seconds a pending approval remains valid |
 
@@ -198,11 +199,9 @@ The `transaction` option controls transaction scope:
 | `each` | Wrap each parameter set in its own transaction |
 | `none` | Do not start explicit transactions |
 
-`everyone` is accepted as an alias for `each`, but `each` is the preferred name.
-
 The server splits `paramsList` into internal batches using `MYSQL_BATCH_MAX_SIZE`. For example, with the default size of `100`, `250` parameter sets run as `100`, `100`, and `50`.
 
-Detailed per-row execution results are written to a timestamped `.log` file under `logs/`. The tool response only returns summary counts and the log file path. Log files older than seven days are cleaned up automatically when the server starts.
+Detailed per-row execution results are written to a timestamped `.log` file under `MYSQL_LOG_PATH`, which defaults to `logs/`. The tool response only returns summary counts and the log file path. Log files older than seven days are cleaned up automatically when the server starts.
 
 ### CSV Import and Export
 
@@ -327,7 +326,7 @@ This is an approval-friendly protocol. The server cannot verify that a human app
 - Use `MYSQL_POLICY_HOOK` when you need an external policy or approval workflow.
 - Be careful with `mysql_execute`, because it can modify data.
 - Be careful with `mysql_import_csv`, because it can insert many rows.
-- Batch execution and CSV import logs include parameter values and per-row results. Treat files under `logs/` as sensitive.
+- Batch execution and CSV import logs include parameter values and per-row results. Treat files under `MYSQL_LOG_PATH` as sensitive.
 - CSV export writes table data to the local filesystem. Treat exported files as sensitive.
 - Multi-statement SQL is disabled in the MySQL client configuration.
 - Do not commit `.env` files or real database credentials to GitHub.

@@ -1,9 +1,10 @@
 import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { config } from './config.js';
 
 const LOG_RETENTION_DAYS = 7;
 const LOG_RETENTION_MS = LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-const logsDirectory = path.join(process.cwd(), 'logs');
+const logsDirectory = path.resolve(config.logPath);
 
 export async function cleanupOldLogs(now = Date.now()): Promise<void> {
   await mkdir(logsDirectory, { recursive: true });

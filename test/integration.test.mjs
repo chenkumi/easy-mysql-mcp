@@ -7,6 +7,8 @@ import test from 'node:test';
 
 loadDotEnv(path.resolve('.env'));
 
+const suffix = Date.now();
+const customLogDir = path.join(os.tmpdir(), `easy-mysql-mcp-logs-${suffix}`);
 const requiredEnv = [
   'TEST_HOST',
   'TEST_PORT',
@@ -15,7 +17,6 @@ const requiredEnv = [
   'TEST_DB',
 ];
 const missingEnv = requiredEnv.filter((key) => !process.env[key]);
-const suffix = Date.now();
 const testTable = `mcp_test_${suffix}`;
 const secondTable = `mcp_test_second_${suffix}`;
 const deniedTable = `mcp_test_denied_${suffix}`;
@@ -29,17 +30,20 @@ if (missingEnv.length === 0) {
   process.env.MYSQL_PASSWORD = process.env.TEST_PASSWORD;
   process.env.MYSQL_DATABASE = process.env.TEST_DB;
   process.env.MYSQL_BATCH_MAX_SIZE = process.env.MYSQL_BATCH_MAX_SIZE ?? '2';
+  process.env.MYSQL_LOG_PATH = customLogDir;
   process.env.MYSQL_MCP_ALLOW_TABLES = [testTable, secondTable, testView].join(',');
   process.env.MYSQL_MCP_DENY_TABLES = deniedTable;
 }
 
 test('easy-mysql-mcp tool interface integration tests', { skip: missingEnv.length > 0 ? `Missing test env: ${missingEnv.join(', ')}` : false }, async (t) => {
   const db = await import('../build/db.js');
+  const logs = await import('../build/logs.js');
   const tools = await import('../build/toolHandlers.js');
 
   const tempDir = path.join(os.tmpdir(), `easy-mysql-mcp-test-${suffix}`);
   await setupDatabase(db);
   await mkdir(tempDir, { recursive: true });
+  await mkdir(customLogDir, { recursive: true });
 
   try {
     await t.test('mysql_query', async (t) => {
@@ -102,6 +106,7 @@ test('easy-mysql-mcp tool interface integration tests', { skip: missingEnv.lengt
         assert.equal(result.batches, 2);
         assert.equal(result.affectedRows, 3);
         assert.ok(existsSync(result.logPath));
+        assert.match(path.resolve(result.logPath), new RegExp(`${escapeRegExp(path.resolve(customLogDir))}`));
       });
 
       await t.test('supports each transaction mode', async () => {
@@ -130,6 +135,7 @@ test('easy-mysql-mcp tool interface integration tests', { skip: missingEnv.lengt
         assert.equal(result.importedRows, 2);
         assert.equal(result.affectedRows, 2);
         assert.ok(existsSync(result.logPath));
+        assert.match(path.resolve(result.logPath), new RegExp(`${escapeRegExp(path.resolve(customLogDir))}`));
       });
 
       await t.test('imports with none transaction mode', async () => {
@@ -307,9 +313,32 @@ test('easy-mysql-mcp tool interface integration tests', { skip: missingEnv.lengt
         assert.match(firstGrant.toUpperCase(), /GRANT|USAGE/);
       });
     });
+
+    await t.test('log maintenance', async (t) => {
+      await t.test('removes expired log files from MYSQL_LOG_PATH', async () => {
+        const oldLogPath = path.join(customLogDir, 'expired.log');
+        await writeFile(oldLogPath, 'old log\n', 'utf8');
+        const oldTimestamp = new Date('2000-01-01T00:00:00.000Z');
+        await import('node:fs/promises').then(({ utimes }) => utimes(oldLogPath, oldTimestamp, oldTimestamp));
+
+        await logs.cleanupOldLogs();
+
+        assert.equal(existsSync(oldLogPath), false);
+      });
+
+      await t.test('keeps non-log files in MYSQL_LOG_PATH', async () => {
+        const markerPath = path.join(customLogDir, 'keep.txt');
+        await writeFile(markerPath, 'keep me\n', 'utf8');
+
+        await logs.cleanupOldLogs();
+
+        assert.equal(existsSync(markerPath), true);
+      });
+    });
   } finally {
     await teardownDatabase(db);
     await db.pool.end();
+    await rm(customLogDir, { recursive: true, force: true });
     await rm(tempDir, { recursive: true, force: true });
   }
 });
@@ -397,4 +426,8 @@ function parseDotEnvValue(value) {
   }
 
   return value;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

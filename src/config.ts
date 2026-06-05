@@ -2,6 +2,7 @@ export type McpMode = 'readonly' | 'readwrite';
 
 const DEFAULT_BATCH_MAX_SIZE = 100;
 const DEFAULT_APPROVAL_TTL_SECONDS = 300;
+const DEFAULT_LOG_PATH = 'logs';
 
 function parseBoolean(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true';
@@ -44,6 +45,7 @@ export const config = {
   allowTables: parseList(process.env.MYSQL_MCP_ALLOW_TABLES),
   denyTables: parseList(process.env.MYSQL_MCP_DENY_TABLES),
   batchMaxSize: parsePositiveInt(process.env.MYSQL_BATCH_MAX_SIZE, DEFAULT_BATCH_MAX_SIZE),
+  logPath: process.env.MYSQL_LOG_PATH?.trim() || DEFAULT_LOG_PATH,
   policyHookUrl: process.env.MYSQL_POLICY_HOOK?.trim() || undefined,
   approvalTtlSeconds: parsePositiveInt(process.env.MYSQL_APPROVAL_TTL_SECONDS, DEFAULT_APPROVAL_TTL_SECONDS),
 };
