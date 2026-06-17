@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -35,9 +37,22 @@ const server = new McpServer({
   description: `MySQL Database: ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}`,
 });
 
+const manualText = readFileSync(fileURLToPath(new URL('../MANUAL.md', import.meta.url)), 'utf8');
+
 // --- Register Tools ---
 
 const transactionModeSchema = z.enum(['all', 'batch', 'each', 'none']);
+
+server.registerTool(
+  'mysql_manual',
+  {
+    description: 'Return the MySQL MCP manual. Use this first when you are unsure how to use mysql_query, mysql_execute, mysql_batch_execute, or when an operation fails and you need the safe usage rules, parameter rules, or SQL composition guidance.',
+    inputSchema: z.object({}),
+  },
+  async () => ({
+    content: [{ type: 'text', text: manualText }],
+  })
+);
 
 server.registerTool(
   'mysql_query',

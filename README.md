@@ -16,7 +16,7 @@ This project uses Node.js, TypeScript, the official MCP SDK, and `mysql2/promise
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20 or newer
 - npm
 - A reachable MySQL-compatible database
 
@@ -91,6 +91,8 @@ npm start
 
 The server communicates over stdio and is normally launched by an MCP client rather than run manually.
 
+If you are unsure how a tool should be used, or an operation fails, call `mysql_manual` first. It returns the built-in manual with safe usage rules, parameter binding guidance, and SQL composition notes.
+
 ## Claude Desktop Example
 
 ```json
@@ -155,6 +157,7 @@ MYSQL_DATABASE = "YOUR DB NAME"
 
 | Tool | Description |
 | --- | --- |
+| `mysql_manual` | Return the built-in manual. Use this first when you are unsure how to use MySQL tools or need help diagnosing an operation error |
 | `mysql_query` | Execute a SQL query intended for data retrieval, such as `SELECT` |
 | `mysql_execute` | Execute a data modification statement, such as `INSERT`, `UPDATE`, or `DELETE` |
 | `mysql_schema_execute` | Execute schema modification statements in advanced mode, such as `CREATE TABLE`, `ALTER TABLE`, `CREATE VIEW`, `CREATE TRIGGER`, and `CREATE INDEX` |

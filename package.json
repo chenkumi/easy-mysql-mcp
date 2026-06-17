@@ -9,10 +9,12 @@
   },
   "files": [
     "build",
-    "README.md"
+    "README.md",
+    "README.zh-TW.md",
+    "MANUAL.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "keywords": [
     "mcp",
@@ -34,12 +36,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "mysql2": "^3.22.4",
+    "mysql2": "^3.22.5",
     "node-sql-parser": "^5.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.3",
     "typescript": "^6.0.3"
   },
   "repository": {

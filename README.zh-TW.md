@@ -16,7 +16,7 @@
 
 ## 需求
 
-- Node.js 18 或更新版本
+- Node.js 20 或更新版本
 - npm
 - 可連線的 MySQL-compatible database
 
@@ -153,8 +153,11 @@ MYSQL_DATABASE = "YOUR DB NAME"
 
 ## 可用工具
 
+如果你不確定某個工具該怎麼用，或操作失敗，請先呼叫 `mysql_manual`。它會回傳內建手冊，包含安全使用規則、參數綁定指引，以及 SQL 組合方式。
+
 | 工具 | 說明 |
 | --- | --- |
+| `mysql_manual` | 回傳內建手冊。當你不確定如何使用 MySQL 工具，或需要排查操作錯誤時，請先查這個工具 |
 | `mysql_query` | 執行用於資料讀取的 SQL query，例如 `SELECT` |
 | `mysql_execute` | 執行資料修改 statement，例如 `INSERT`、`UPDATE`、`DELETE` |
 | `mysql_schema_execute` | 在 advanced mode 執行 schema 修改 statement，例如 `CREATE TABLE`、`ALTER TABLE`、`CREATE VIEW`、`CREATE TRIGGER`、`CREATE INDEX` |
